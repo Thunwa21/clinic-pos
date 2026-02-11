@@ -13,6 +13,7 @@ All steps were executed via Claude Code CLI in a single continuous session. Each
 **Prompt:** Provided a detailed plan for .NET 10 Web API scaffold including folder structure, NuGet packages, Program.cs configuration, and Dockerfile.
 
 **Iterations:**
+
 - Initial `dotnet new webapi` succeeded
 - NuGet version mismatch: `Microsoft.EntityFrameworkCore` resolved to `10.0.0-preview` instead of `10.0.3`. Fixed by specifying explicit version.
 - `.slnx` format: .NET 10 uses new solution format instead of `.sln`. Adapted accordingly.
@@ -24,6 +25,7 @@ All steps were executed via Claude Code CLI in a single continuous session. Each
 **Prompt:** "ต่อ Step 3 ได้เลย" (Continue to Step 3)
 
 **Iterations:**
+
 - `create-next-app` had an interactive prompt for React Compiler that blocked automation. Fixed by piping `echo "No"` to stdin.
 - Removed nested `.git` directory created by create-next-app.
 
@@ -34,6 +36,7 @@ All steps were executed via Claude Code CLI in a single continuous session. Each
 **Prompt:** "ต่อ Step 4 ได้เลย"
 
 **Iterations:**
+
 - Port 5000 was already in use on host. Remapped backend to `5001:5000`.
 - Port 3000 was already in use on host. Remapped frontend to `3001:3000`.
 
@@ -44,6 +47,7 @@ All steps were executed via Claude Code CLI in a single continuous session. Each
 **Prompt:** "ต่อ Step 5 ได้เลย"
 
 **Iterations:**
+
 - Created Patient entity, DTOs, controller, migration.
 - Docker wasn't picking up code changes because no `.dockerignore` existed (bin/obj bloated context). Added `.dockerignore`, rebuilt with `--no-cache`.
 - Tested: POST 201, duplicate 409, GET with tenant/branch filter, sort order.
@@ -55,6 +59,7 @@ All steps were executed via Claude Code CLI in a single continuous session. Each
 **Prompt:** "ทำเลย ฉันต้องการมอง ui ด้วย" (Do it, I want to see the UI)
 
 **Iterations:**
+
 - `.env.local` had wrong port (5000 instead of 5001). Fixed.
 - Added CORS `AllowAnyOrigin` to backend.
 - Built patients page with create form and data table.
@@ -66,6 +71,7 @@ All steps were executed via Claude Code CLI in a single continuous session. Each
 **Prompt:** "ทำเลย Stubbing auth is acceptable only if permissions are still enforced reliably"
 
 **Iterations:**
+
 - Created User entity, JWT auth, policy-based authorization.
 - Admin bootstrap chicken-and-egg problem: no admin user existed to call assign-role endpoint. Resolved by direct DB UPDATE, later replaced by seeder.
 - Updated PatientsController to extract TenantId from JWT claims instead of request body.
@@ -78,6 +84,7 @@ All steps were executed via Claude Code CLI in a single continuous session. Each
 **Prompt:** "ต่อ step 7 ได้เลย"
 
 **Iterations:**
+
 - Created idempotent seeder (checks if "admin" exists).
 - Initially 1 tenant / 3 users.
 - Developer asked about multi-tenant testing: "user ผูกกับ tenant ใช่ไหม หากมี 2 tenant จะทดสอบยังไง"
@@ -90,6 +97,7 @@ All steps were executed via Claude Code CLI in a single continuous session. Each
 **Prompt:** "ฉันอยากให้ตอน login ให้ระบุ tenant ด้วย และ tenant ฉันอยากให้สั้นลงเพื่อให้กรอกได้ง่าย"
 
 **Iterations:**
+
 - Created Tenant entity with short `Code` field (SKV, SLM).
 - Added `GET /auth/tenants` public endpoint.
 - Updated login to require and validate `tenantCode`.
@@ -102,6 +110,7 @@ All steps were executed via Claude Code CLI in a single continuous session. Each
 **Prompt:** "ทำเลย" (Do it)
 
 **Iterations:**
+
 - Added `IDistributedCache` to PatientsController.
 - Cache key: `tenant:{tenantId}:patients:list:{branchId|all}`, TTL 5 min.
 - POST invalidates both "all" and branch-specific keys.
@@ -113,6 +122,7 @@ All steps were executed via Claude Code CLI in a single continuous session. Each
 **Prompt:** "ต่อ 9"
 
 **Iterations:**
+
 - Created xUnit test project with WebApplicationFactory.
 - Swapped PostgreSQL for SQLite in-memory, Redis for MemoryCache.
 - Multiple issues resolved:
@@ -137,9 +147,26 @@ All steps were executed via Claude Code CLI in a single continuous session. Each
 
 ## Summary
 
-| Metric | Value |
-|--------|-------|
-| Total steps | 10 (+ tenant selection enhancement) |
-| AI-assisted iterations | ~30 prompt-response cycles |
-| Major blockers resolved | Port conflicts, Docker cache, EF Core provider swaps, SQLite compatibility |
-| Test coverage | 4 integration tests covering tenant isolation, uniqueness, auth, and authorization |
+| Metric                  | Value                                                                              |
+| ----------------------- | ---------------------------------------------------------------------------------- |
+| Total steps             | 10 (+ tenant selection enhancement)                                                |
+| AI-assisted iterations  | ~30 prompt-response cycles                                                         |
+| Major blockers resolved | Port conflicts, Docker cache, EF Core provider swaps, SQLite compatibility         |
+| Test coverage           | 4 integration tests covering tenant isolation, uniqueness, auth, and authorization |
+
+## AI Usage Philosophy
+
+AI was used as a productivity multiplier, not a decision-maker.
+
+All architectural boundaries, tenant isolation rules,
+and permission enforcement logic were manually reviewed
+and validated.
+
+AI-generated outputs were frequently incorrect in:
+
+- Cross-provider EF configuration
+- Test host configuration
+- Migration consistency
+
+Human review and iterative refinement were required
+to reach a stable, production-like result.

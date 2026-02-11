@@ -1,4 +1,4 @@
-# Clinic POS – 90 Minute Execution Plan
+# Clinic POS – Execution Plan
 
 AI-Assisted Build Strategy (Claude CLI)
 
