@@ -4,8 +4,9 @@ import { useState, useEffect, useMemo } from "react";
 import { getSession } from "@/lib/auth";
 import { canCreatePatient } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
-import type { Patient } from "@/lib/types";
+import type { Patient, BranchInfo } from "@/lib/types";
 import SearchInput from "@/components/ui/SearchInput";
+import Select from "@/components/ui/Select";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import PatientTable from "@/components/patients/PatientTable";
@@ -13,17 +14,21 @@ import PatientFormModal from "@/components/patients/PatientFormModal";
 
 export default function PatientsPage() {
   const session = getSession();
+  const branches: BranchInfo[] = session?.branches || [];
+
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [branchFilter, setBranchFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
 
-  async function fetchPatients() {
+  async function fetchPatients(branchId?: string) {
     setLoading(true);
     setError("");
     try {
-      const data = await apiFetch<Patient[]>("/patients");
+      const query = branchId ? `?branchId=${branchId}` : "";
+      const data = await apiFetch<Patient[]>(`/patients${query}`);
       setPatients(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load patients");
@@ -33,8 +38,8 @@ export default function PatientsPage() {
   }
 
   useEffect(() => {
-    fetchPatients();
-  }, []);
+    fetchPatients(branchFilter || undefined);
+  }, [branchFilter]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return patients;
@@ -49,6 +54,11 @@ export default function PatientsPage() {
   }, [patients, search]);
 
   const showAdd = session && canCreatePatient(session.role);
+
+  const branchFilterOptions = [
+    { value: "", label: "All Branches" },
+    ...branches.map((b) => ({ value: b.id, label: b.name })),
+  ];
 
   return (
     <div>
@@ -87,24 +97,40 @@ export default function PatientsPage() {
       )}
 
       <Card className="p-0">
-        <div className="border-b border-border p-4">
+        <div className="flex flex-col gap-3 border-b border-border p-4 sm:flex-row sm:items-center">
           <SearchInput
             placeholder="Search by name or phone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="max-w-sm"
           />
+          {branches.length > 0 && (
+            <Select
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+              options={branchFilterOptions}
+              className="max-w-[200px]"
+            />
+          )}
         </div>
 
         {error ? (
           <div className="p-6 text-center">
             <p className="text-sm text-danger">{error}</p>
-            <Button variant="secondary" className="mt-3" onClick={fetchPatients}>
+            <Button
+              variant="secondary"
+              className="mt-3"
+              onClick={() => fetchPatients(branchFilter || undefined)}
+            >
               Retry
             </Button>
           </div>
         ) : (
-          <PatientTable patients={filtered} loading={loading} />
+          <PatientTable
+            patients={filtered}
+            branches={branches}
+            loading={loading}
+          />
         )}
       </Card>
 
@@ -114,7 +140,7 @@ export default function PatientsPage() {
           onClose={() => setModalOpen(false)}
           onCreated={() => {
             setModalOpen(false);
-            fetchPatients();
+            fetchPatients(branchFilter || undefined);
           }}
         />
       )}

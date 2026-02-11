@@ -1,5 +1,6 @@
 using System.Text;
 using ClinicPos.Api.Domain.Entities;
+using ClinicPos.Api.Infrastructure;
 using ClinicPos.Api.Infrastructure.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -10,6 +11,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 // --- OpenAPI ---
 builder.Services.AddOpenApi();
+
+// --- Tenant Context ---
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
 
 // --- EF Core + PostgreSQL ---
 builder.Services.AddDbContext<ClinicPosDbContext>(options =>

@@ -50,15 +50,26 @@ public class AuthController : ControllerBase
         {
             Username = request.Username,
             PasswordHash = HashPassword(request.Password),
+            FullName = request.Username,
             Role = Roles.Viewer,
-            TenantId = tenant.Id,
-            BranchId = request.BranchId
+            TenantId = tenant.Id
         };
 
         _db.Users.Add(user);
+
+        // If a BranchId is provided, create the UserBranch association
+        if (request.BranchId.HasValue)
+        {
+            _db.UserBranches.Add(new UserBranch
+            {
+                UserId = user.Id,
+                BranchId = request.BranchId.Value
+            });
+        }
+
         await _db.SaveChangesAsync();
 
-        return Created($"/auth/users/{user.Id}", ToResponse(user));
+        return Created($"/auth/users/{user.Id}", await ToResponseAsync(user));
     }
 
     [HttpPost("login")]
@@ -72,20 +83,79 @@ public class AuthController : ControllerBase
         if (user == null || !VerifyPassword(request.Password, user.PasswordHash))
             return Unauthorized(new { error = "Invalid username or password." });
 
-        var token = GenerateJwt(user);
+        // Fetch user branches
+        var branches = await _db.UserBranches
+            .Where(ub => ub.UserId == user.Id)
+            .Join(_db.Branches, ub => ub.BranchId, b => b.Id, (ub, b) => new BranchInfo { Id = b.Id, Name = b.Name })
+            .ToArrayAsync();
+
+        var token = GenerateJwt(user, branches);
 
         return Ok(new LoginResponse
         {
             Token = token,
             Username = user.Username,
+            FullName = user.FullName,
             Role = user.Role,
             TenantId = user.TenantId,
             TenantCode = tenant.Code,
             TenantName = tenant.Name,
-            BranchId = user.BranchId
+            Branches = branches
         });
     }
 
+    // --- POST /auth/users (Admin only) ---
+    [HttpPost("users")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request)
+    {
+        var tenantId = GetTenantId();
+        if (tenantId == null)
+            return Forbid();
+
+        var validRoles = new[] { Roles.Admin, Roles.User, Roles.Viewer };
+        if (!validRoles.Contains(request.Role))
+            return BadRequest(new { error = $"Invalid role. Must be one of: {string.Join(", ", validRoles)}" });
+
+        if (await _db.Users.AnyAsync(u => u.Username == request.Username))
+            return Conflict(new { error = "Username already exists." });
+
+        // Validate that all branchIds belong to the current tenant
+        if (request.BranchIds.Length > 0)
+        {
+            var validBranchCount = await _db.Branches
+                .Where(b => b.TenantId == tenantId.Value && request.BranchIds.Contains(b.Id))
+                .CountAsync();
+            if (validBranchCount != request.BranchIds.Length)
+                return BadRequest(new { error = "One or more branch IDs do not belong to your tenant." });
+        }
+
+        var user = new User
+        {
+            Username = request.Username,
+            PasswordHash = HashPassword(request.Password),
+            FullName = request.FullName,
+            Role = request.Role,
+            TenantId = tenantId.Value
+        };
+
+        _db.Users.Add(user);
+
+        foreach (var branchId in request.BranchIds)
+        {
+            _db.UserBranches.Add(new UserBranch
+            {
+                UserId = user.Id,
+                BranchId = branchId
+            });
+        }
+
+        await _db.SaveChangesAsync();
+
+        return Created($"/auth/users/{user.Id}", await ToResponseAsync(user));
+    }
+
+    // --- PUT /auth/users/{id}/role (Admin only) ---
     [HttpPut("users/{id:guid}/role")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> AssignRole(Guid id, [FromBody] AssignRoleRequest request)
@@ -101,9 +171,56 @@ public class AuthController : ControllerBase
         user.Role = request.Role;
         await _db.SaveChangesAsync();
 
-        return Ok(ToResponse(user));
+        return Ok(await ToResponseAsync(user));
     }
 
+    // --- POST /auth/users/{id}/branches (Admin only) ---
+    [HttpPost("users/{id:guid}/branches")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AddBranches(Guid id, [FromBody] AddBranchesRequest request)
+    {
+        var tenantId = GetTenantId();
+        if (tenantId == null)
+            return Forbid();
+
+        var user = await _db.Users.FindAsync(id);
+        if (user == null)
+            return NotFound(new { error = "User not found." });
+
+        if (user.TenantId != tenantId.Value)
+            return Forbid();
+
+        // Validate branches belong to tenant
+        var validBranchCount = await _db.Branches
+            .Where(b => b.TenantId == tenantId.Value && request.BranchIds.Contains(b.Id))
+            .CountAsync();
+        if (validBranchCount != request.BranchIds.Length)
+            return BadRequest(new { error = "One or more branch IDs do not belong to your tenant." });
+
+        // Get existing associations
+        var existing = await _db.UserBranches
+            .Where(ub => ub.UserId == id)
+            .Select(ub => ub.BranchId)
+            .ToListAsync();
+
+        foreach (var branchId in request.BranchIds)
+        {
+            if (!existing.Contains(branchId))
+            {
+                _db.UserBranches.Add(new UserBranch
+                {
+                    UserId = id,
+                    BranchId = branchId
+                });
+            }
+        }
+
+        await _db.SaveChangesAsync();
+
+        return Ok(await ToResponseAsync(user));
+    }
+
+    // --- PUT /auth/users/{id}/tenant (Admin only) ---
     [HttpPut("users/{id:guid}/tenant")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> AssignTenant(Guid id, [FromBody] AssignTenantRequest request)
@@ -113,17 +230,33 @@ public class AuthController : ControllerBase
             return NotFound(new { error = "User not found." });
 
         user.TenantId = request.TenantId;
-        user.BranchId = request.BranchId;
         await _db.SaveChangesAsync();
 
-        return Ok(ToResponse(user));
+        // If a branch is provided, add association
+        if (request.BranchId.HasValue)
+        {
+            var exists = await _db.UserBranches.AnyAsync(ub => ub.UserId == id && ub.BranchId == request.BranchId.Value);
+            if (!exists)
+            {
+                _db.UserBranches.Add(new UserBranch
+                {
+                    UserId = id,
+                    BranchId = request.BranchId.Value
+                });
+                await _db.SaveChangesAsync();
+            }
+        }
+
+        return Ok(await ToResponseAsync(user));
     }
 
-    private string GenerateJwt(User user)
+    private string GenerateJwt(User user, BranchInfo[] branches)
     {
         var key = _config["Jwt:Key"] ?? "ClinicPosDefaultSecretKey_MustBeAtLeast32Bytes!";
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+
+        var branchIds = string.Join(",", branches.Select(b => b.Id));
 
         var claims = new[]
         {
@@ -131,7 +264,7 @@ public class AuthController : ControllerBase
             new Claim(ClaimTypes.Name, user.Username),
             new Claim(ClaimTypes.Role, user.Role),
             new Claim("TenantId", user.TenantId.ToString()),
-            new Claim("BranchId", user.BranchId?.ToString() ?? ""),
+            new Claim("BranchIds", branchIds),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 
@@ -144,6 +277,12 @@ public class AuthController : ControllerBase
         );
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    private Guid? GetTenantId()
+    {
+        var claim = User.FindFirst("TenantId")?.Value;
+        return Guid.TryParse(claim, out var id) ? id : null;
     }
 
     private static string HashPassword(string password)
@@ -165,13 +304,22 @@ public class AuthController : ControllerBase
         return CryptographicOperations.FixedTimeEquals(hash, storedHash);
     }
 
-    private static UserResponse ToResponse(User u) => new()
+    private async Task<UserResponse> ToResponseAsync(User u)
     {
-        Id = u.Id,
-        Username = u.Username,
-        Role = u.Role,
-        TenantId = u.TenantId,
-        BranchId = u.BranchId,
-        CreatedAt = u.CreatedAt
-    };
+        var branches = await _db.UserBranches
+            .Where(ub => ub.UserId == u.Id)
+            .Join(_db.Branches, ub => ub.BranchId, b => b.Id, (ub, b) => new BranchInfo { Id = b.Id, Name = b.Name })
+            .ToArrayAsync();
+
+        return new UserResponse
+        {
+            Id = u.Id,
+            Username = u.Username,
+            FullName = u.FullName,
+            Role = u.Role,
+            TenantId = u.TenantId,
+            Branches = branches,
+            CreatedAt = u.CreatedAt
+        };
+    }
 }

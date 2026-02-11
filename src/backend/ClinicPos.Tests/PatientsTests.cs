@@ -33,7 +33,7 @@ public class PatientsTests : IClassFixture<TestWebApplicationFactory>
     public async Task Tenant1_Cannot_See_Tenant2_Patients()
     {
         // Login as Tenant 1 admin and create a patient
-        var token1 = await LoginAsync("admin", "admin1234", "SKV");
+        var token1 = await LoginAsync("admin@aura", "Admin123!", "AURA");
         SetToken(token1);
 
         var createRes = await _client.PostAsJsonAsync("/patients", new
@@ -50,7 +50,7 @@ public class PatientsTests : IClassFixture<TestWebApplicationFactory>
         Assert.Contains(patients1!, p => p.GetProperty("phoneNumber").GetString() == "0111111111");
 
         // Login as Tenant 2 admin
-        var token2 = await LoginAsync("admin2", "admin1234", "SLM");
+        var token2 = await LoginAsync("admin@silom", "Admin123!", "SLM");
         SetToken(token2);
 
         // Verify Tenant 2 cannot see Tenant 1's patient
@@ -63,7 +63,7 @@ public class PatientsTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task Duplicate_Phone_Within_Same_Tenant_Returns_409()
     {
-        var token = await LoginAsync("admin", "admin1234", "SKV");
+        var token = await LoginAsync("admin@aura", "Admin123!", "AURA");
         SetToken(token);
 
         var body = new
@@ -94,7 +94,7 @@ public class PatientsTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task Viewer_Cannot_Create_Patient()
     {
-        var token = await LoginAsync("viewer", "viewer1234", "SKV");
+        var token = await LoginAsync("viewer@aura", "Viewer123!", "AURA");
         SetToken(token);
 
         var res = await _client.PostAsJsonAsync("/patients", new

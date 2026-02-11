@@ -3,8 +3,10 @@
 import { useState, FormEvent } from "react";
 import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
+import Select from "@/components/ui/Select";
 import Button from "@/components/ui/Button";
 import { apiFetch, ApiError } from "@/lib/api";
+import { getSession } from "@/lib/auth";
 import type { Patient } from "@/lib/types";
 
 interface PatientFormModalProps {
@@ -18,9 +20,13 @@ export default function PatientFormModal({
   onClose,
   onCreated,
 }: PatientFormModalProps) {
+  const session = getSession();
+  const branches = session?.branches || [];
+
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [primaryBranchId, setPrimaryBranchId] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -28,6 +34,7 @@ export default function PatientFormModal({
     setFirstName("");
     setLastName("");
     setPhoneNumber("");
+    setPrimaryBranchId("");
     setError("");
     setSubmitting(false);
   }
@@ -45,7 +52,12 @@ export default function PatientFormModal({
     try {
       await apiFetch<Patient>("/patients", {
         method: "POST",
-        body: { firstName, lastName, phoneNumber },
+        body: {
+          firstName,
+          lastName,
+          phoneNumber,
+          ...(primaryBranchId ? { primaryBranchId } : {}),
+        },
       });
       resetForm();
       onCreated();
@@ -61,6 +73,11 @@ export default function PatientFormModal({
       setSubmitting(false);
     }
   }
+
+  const branchOptions = [
+    { value: "", label: "— No branch —" },
+    ...branches.map((b) => ({ value: b.id, label: b.name })),
+  ];
 
   return (
     <Modal open={open} onClose={handleClose} title="Add New Patient">
@@ -93,6 +110,14 @@ export default function PatientFormModal({
             onChange={(e) => setPhoneNumber(e.target.value)}
             placeholder="e.g. 081-234-5678"
           />
+          {branches.length > 0 && (
+            <Select
+              label="Primary Branch"
+              value={primaryBranchId}
+              onChange={(e) => setPrimaryBranchId(e.target.value)}
+              options={branchOptions}
+            />
+          )}
         </div>
 
         {error && (

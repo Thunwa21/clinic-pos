@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ClinicPos.Api.Application;
 using ClinicPos.Api.Domain.Entities;
+using ClinicPos.Api.Infrastructure;
 using ClinicPos.Api.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -16,21 +17,32 @@ public class PatientsController : ControllerBase
 {
     private readonly ClinicPosDbContext _db;
     private readonly IDistributedCache _cache;
+    private readonly ITenantContext _tenantContext;
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(5);
 
-    public PatientsController(ClinicPosDbContext db, IDistributedCache cache)
+    public PatientsController(ClinicPosDbContext db, IDistributedCache cache, ITenantContext tenantContext)
     {
         _db = db;
         _cache = cache;
+        _tenantContext = tenantContext;
     }
 
     [HttpPost]
     [Authorize(Policy = "CanCreatePatient")]
     public async Task<IActionResult> Create([FromBody] CreatePatientRequest request)
     {
-        var tenantId = GetTenantId();
+        var tenantId = _tenantContext.TenantId;
         if (tenantId == null)
             return Forbid();
+
+        // Validate branch belongs to tenant if provided
+        if (request.PrimaryBranchId.HasValue)
+        {
+            var branchExists = await _db.Branches
+                .AnyAsync(b => b.Id == request.PrimaryBranchId.Value && b.TenantId == tenantId.Value);
+            if (!branchExists)
+                return BadRequest(new { error = "Branch does not belong to your tenant." });
+        }
 
         var patient = new Patient
         {
@@ -64,7 +76,7 @@ public class PatientsController : ControllerBase
     [Authorize(Policy = "CanViewPatient")]
     public async Task<IActionResult> GetByTenant([FromQuery] Guid? branchId)
     {
-        var tenantId = GetTenantId();
+        var tenantId = _tenantContext.TenantId;
         if (tenantId == null)
             return Forbid();
 
@@ -75,8 +87,8 @@ public class PatientsController : ControllerBase
         if (cached != null)
             return Ok(JsonSerializer.Deserialize<List<PatientResponse>>(cached));
 
-        var query = _db.Patients
-            .Where(p => p.TenantId == tenantId.Value);
+        // Global query filter automatically applies TenantId filter
+        var query = _db.Patients.AsQueryable();
 
         if (branchId.HasValue)
             query = query.Where(p => p.PrimaryBranchId == branchId.Value);
@@ -106,12 +118,6 @@ public class PatientsController : ControllerBase
         // Also invalidate the specific branch key if applicable
         if (branchId.HasValue)
             await _cache.RemoveAsync(BuildCacheKey(tenantId, branchId));
-    }
-
-    private Guid? GetTenantId()
-    {
-        var claim = User.FindFirst("TenantId")?.Value;
-        return Guid.TryParse(claim, out var id) ? id : null;
     }
 
     private static PatientResponse ToResponse(Patient p) => new()

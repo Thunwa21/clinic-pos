@@ -3,72 +3,59 @@
 import { useState, useEffect, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { API_URL } from "@/lib/constants";
-import { setSession, getSession } from "@/lib/auth";
-import type { TenantOption, LoginResponse } from "@/lib/types";
+import { setSession, setActiveBranch, getSession } from "@/lib/auth";
+import type { LoginResponse, BranchInfo } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 
+type Step = "login" | "select-branch";
+
 export default function LoginPage() {
   const router = useRouter();
-  const [isRegister, setIsRegister] = useState(false);
+  const [step, setStep] = useState<Step>("login");
+
+  // Login fields
+  const [tenantCode, setTenantCode] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [tenantCode, setTenantCode] = useState("");
-  const [tenants, setTenants] = useState<TenantOption[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Branch selection
+  const [branches, setBranches] = useState<BranchInfo[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState("");
+
   useEffect(() => {
     const session = getSession();
-    if (session) {
+    if (session?.activeBranchId) {
       router.push("/dashboard");
-      return;
     }
-
-    fetch(`${API_URL}/auth/tenants`)
-      .then((res) => res.json())
-      .then((data: TenantOption[]) => {
-        setTenants(data);
-        if (data.length > 0) setTenantCode(data[0].code);
-      })
-      .catch(() => {});
   }, [router]);
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleLogin(e: FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
 
     try {
-      if (isRegister) {
-        const res = await fetch(`${API_URL}/auth/register`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password, tenantCode }),
-        });
-        if (res.status === 409) {
-          setError("Username already exists.");
-          return;
-        }
-        if (!res.ok) {
-          const data = await res.json().catch(() => null);
-          throw new Error(data?.error || `HTTP ${res.status}`);
-        }
-        setIsRegister(false);
-        setError("");
-        alert("Registered! You can now log in.");
-        return;
-      }
-
       const res = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password, tenantCode }),
+        body: JSON.stringify({
+          username,
+          password,
+          tenantCode: tenantCode.toUpperCase(),
+        }),
       });
 
       if (res.status === 401) {
         setError("Invalid username or password.");
+        return;
+      }
+      if (res.status === 400) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error || "Invalid tenant code.");
         return;
       }
       if (!res.ok) {
@@ -77,8 +64,31 @@ export default function LoginPage() {
       }
 
       const data: LoginResponse = await res.json();
-      setSession(data);
-      router.push("/dashboard");
+
+      setSession({
+        token: data.token,
+        username: data.username,
+        fullName: data.fullName,
+        role: data.role,
+        tenantId: data.tenantId,
+        tenantCode: data.tenantCode,
+        tenantName: data.tenantName,
+        branches: data.branches,
+      });
+
+      if (data.branches.length === 0) {
+        // No branches assigned — go straight to dashboard
+        router.push("/dashboard");
+      } else if (data.branches.length === 1) {
+        // Auto-select single branch
+        setActiveBranch(data.branches[0].id);
+        router.push("/dashboard");
+      } else {
+        // Multiple branches — let user pick
+        setBranches(data.branches);
+        setSelectedBranchId(data.branches[0].id);
+        setStep("select-branch");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -86,10 +96,12 @@ export default function LoginPage() {
     }
   }
 
-  const tenantOptions = tenants.map((t) => ({
-    value: t.code,
-    label: `${t.code} — ${t.name}`,
-  }));
+  function handleSelectBranch(e: FormEvent) {
+    e.preventDefault();
+    if (!selectedBranchId) return;
+    setActiveBranch(selectedBranchId);
+    router.push("/dashboard");
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-primary-light">
@@ -115,87 +127,101 @@ export default function LoginPage() {
           <p className="mt-1 text-sm text-text-muted">Management System</p>
         </div>
 
-        {/* Form Card */}
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-2xl border border-border bg-white p-8 shadow-sm"
-        >
-          <h2 className="text-lg font-semibold text-text-primary mb-1">
-            {isRegister ? "Create Account" : "Welcome Back"}
-          </h2>
-          <p className="text-sm text-text-muted mb-6">
-            {isRegister
-              ? "Register a new account to get started"
-              : "Sign in to your account to continue"}
-          </p>
+        {/* Login Step */}
+        {step === "login" && (
+          <form
+            onSubmit={handleLogin}
+            className="rounded-2xl border border-border bg-white p-8 shadow-sm"
+          >
+            <h2 className="text-lg font-semibold text-text-primary mb-1">
+              Welcome Back
+            </h2>
+            <p className="text-sm text-text-muted mb-6">
+              Sign in to your account to continue
+            </p>
 
-          <div className="space-y-4">
-            {tenantOptions.length > 0 ? (
-              <Select
-                label="Clinic"
-                required
-                value={tenantCode}
-                onChange={(e) => setTenantCode(e.target.value)}
-                options={tenantOptions}
-              />
-            ) : (
+            <div className="space-y-4">
               <Input
                 label="Clinic Code"
                 type="text"
                 required
                 value={tenantCode}
                 onChange={(e) => setTenantCode(e.target.value.toUpperCase())}
-                placeholder="e.g. SKV"
+                placeholder="e.g. AURA"
               />
+
+              <Input
+                label="Username"
+                type="text"
+                required
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter your username"
+              />
+
+              <Input
+                label="Password"
+                type="password"
+                required
+                minLength={4}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+              />
+            </div>
+
+            {error && (
+              <div className="mt-4 rounded-lg bg-danger-light px-4 py-3 text-sm text-danger">
+                {error}
+              </div>
             )}
 
-            <Input
-              label="Username"
-              type="text"
+            <Button type="submit" disabled={loading} className="mt-6 w-full">
+              {loading ? "Signing in..." : "Sign In"}
+            </Button>
+          </form>
+        )}
+
+        {/* Branch Selection Step */}
+        {step === "select-branch" && (
+          <form
+            onSubmit={handleSelectBranch}
+            className="rounded-2xl border border-border bg-white p-8 shadow-sm"
+          >
+            <h2 className="text-lg font-semibold text-text-primary mb-1">
+              Select Branch
+            </h2>
+            <p className="text-sm text-text-muted mb-6">
+              Choose the branch you want to work in
+            </p>
+
+            <Select
+              label="Branch"
               required
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter your username"
+              value={selectedBranchId}
+              onChange={(e) => setSelectedBranchId(e.target.value)}
+              options={branches.map((b) => ({
+                value: b.id,
+                label: b.name,
+              }))}
             />
 
-            <Input
-              label="Password"
-              type="password"
-              required
-              minLength={4}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
-            />
-          </div>
+            <Button type="submit" className="mt-6 w-full">
+              Continue
+            </Button>
 
-          {error && (
-            <div className="mt-4 rounded-lg bg-danger-light px-4 py-3 text-sm text-danger">
-              {error}
-            </div>
-          )}
-
-          <Button
-            type="submit"
-            disabled={loading}
-            className="mt-6 w-full"
-          >
-            {loading ? "Please wait..." : isRegister ? "Register" : "Sign In"}
-          </Button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setIsRegister(!isRegister);
-              setError("");
-            }}
-            className="mt-4 w-full text-center text-sm text-text-muted hover:text-primary transition-colors"
-          >
-            {isRegister
-              ? "Already have an account? Sign in"
-              : "Need an account? Register"}
-          </button>
-        </form>
+            <button
+              type="button"
+              onClick={() => {
+                setStep("login");
+                setError("");
+              }}
+              className="mt-4 w-full text-center text-sm text-text-muted hover:text-primary transition-colors"
+            >
+              Back to login
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );

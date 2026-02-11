@@ -8,28 +8,32 @@ export interface Patient {
   createdAt: string;
 }
 
+export interface BranchInfo {
+  id: string;
+  name: string;
+}
+
 export interface LoginResponse {
   token: string;
   username: string;
+  fullName: string;
   role: string;
   tenantId: string;
   tenantCode: string;
   tenantName: string;
+  branches: BranchInfo[];
 }
 
 export interface AuthSession {
   token: string;
   username: string;
+  fullName: string;
   role: string;
   tenantId: string;
   tenantCode: string;
   tenantName: string;
-}
-
-export interface TenantOption {
-  id: string;
-  code: string;
-  name: string;
+  branches: BranchInfo[];
+  activeBranchId: string | null;
 }
 
 export interface NavItem {

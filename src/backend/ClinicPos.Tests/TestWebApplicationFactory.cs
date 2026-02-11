@@ -1,3 +1,4 @@
+using ClinicPos.Api.Infrastructure;
 using ClinicPos.Api.Infrastructure.Data;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -65,6 +66,13 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
             // Add in-memory distributed cache
             services.AddDistributedMemoryCache();
+
+            // Ensure ITenantContext is registered (should already be via Program.cs, but just in case)
+            if (!services.Any(d => d.ServiceType == typeof(ITenantContext)))
+            {
+                services.AddHttpContextAccessor();
+                services.AddScoped<ITenantContext, HttpTenantContext>();
+            }
         });
     }
 

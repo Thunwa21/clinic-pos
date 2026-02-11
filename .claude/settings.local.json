@@ -18,7 +18,14 @@
       "Bash(python -m json.tool:*)",
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZjIxN2U2NS02MGU5LTQ3YTktYjhlOC1jZjhhMjRmZGYzZjAiLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1lIjoiYWRtaW4iLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBZG1pbiIsIlRlbmFudElkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwiQnJhbmNoSWQiOiJhYWFhMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJqdGkiOiI0ZmE5NTY3NS1iMDU4LTQ5ZmUtOTdmOS02Zjk4MjEyMzYwNjIiLCJleHAiOjE3NzA4NDU4OTgsImlzcyI6IkNsaW5pY1BvcyIsImF1ZCI6IkNsaW5pY1BvcyJ9.V2dZQUi0dJSfu0_HKeyVHSOcrCE6zOGhrzayHXl-UrA\")",
       "Bash(python:*)",
-      "Bash(export TK:*)"
+      "Bash(export TK:*)",
+      "Bash(docker volume rm:*)",
+      "Bash(timeout:*)",
+      "Bash(Start-Sleep -Seconds 10)",
+      "Bash(npx next build:*)",
+      "Bash(npx:*)",
+      "Bash(pushd:*)",
+      "Bash(docker ps:*)"
     ]
   }
 }

@@ -1,13 +1,20 @@
 "use client";
 
-import type { Patient } from "@/lib/types";
+import type { Patient, BranchInfo } from "@/lib/types";
 
 interface PatientTableProps {
   patients: Patient[];
+  branches: BranchInfo[];
   loading: boolean;
 }
 
-export default function PatientTable({ patients, loading }: PatientTableProps) {
+export default function PatientTable({
+  patients,
+  branches,
+  loading,
+}: PatientTableProps) {
+  const branchMap = new Map(branches.map((b) => [b.id, b.name]));
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -74,9 +81,9 @@ export default function PatientTable({ patients, loading }: PatientTableProps) {
               <td className="px-4 py-3 font-mono text-text-secondary">
                 {p.phoneNumber}
               </td>
-              <td className="px-4 py-3 text-text-muted">
+              <td className="px-4 py-3 text-text-secondary">
                 {p.primaryBranchId
-                  ? p.primaryBranchId.substring(0, 8) + "..."
+                  ? branchMap.get(p.primaryBranchId) || "Unknown"
                   : "—"}
               </td>
               <td className="px-4 py-3 text-text-muted">
