@@ -3,6 +3,7 @@ using System;
 using ClinicPos.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ClinicPos.Api.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(ClinicPosDbContext))]
-    partial class ClinicPosDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260211135222_RemoveDbDefaultValues")]
+    partial class RemoveDbDefaultValues
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

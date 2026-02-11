@@ -1,6 +1,7 @@
 using ClinicPos.Api.Infrastructure.Data;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,12 +12,20 @@ namespace ClinicPos.Tests;
 
 public class TestWebApplicationFactory : WebApplicationFactory<Program>
 {
-    private static int _dbCounter;
-    private readonly string _dbName = $"TestDb_{Interlocked.Increment(ref _dbCounter)}";
+    private readonly SqliteConnection _keepAliveConnection;
+    private readonly string _connString;
+
+    public TestWebApplicationFactory()
+    {
+        var dbName = $"TestDb_{Guid.NewGuid():N}";
+        _connString = $"DataSource={dbName};Mode=Memory;Cache=Shared";
+        _keepAliveConnection = new SqliteConnection(_connString);
+        _keepAliveConnection.Open();
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        var connString = $"DataSource={_dbName};Mode=Memory;Cache=Shared";
+        var connString = _connString;
 
         builder.ConfigureServices(services =>
         {
@@ -57,5 +66,14 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             // Add in-memory distributed cache
             services.AddDistributedMemoryCache();
         });
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+        if (disposing)
+        {
+            _keepAliveConnection.Dispose();
+        }
     }
 }

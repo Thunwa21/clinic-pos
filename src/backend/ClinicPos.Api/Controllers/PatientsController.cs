@@ -48,7 +48,8 @@ public class PatientsController : ControllerBase
             await _db.SaveChangesAsync();
         }
         catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("duplicate key") == true
-                                            || ex.InnerException?.Message.Contains("unique constraint") == true)
+                                            || ex.InnerException?.Message.Contains("unique constraint") == true
+                                            || ex.InnerException?.Message.Contains("UNIQUE constraint failed") == true)
         {
             return Conflict(new { error = "A patient with this phone number already exists in this tenant." });
         }
