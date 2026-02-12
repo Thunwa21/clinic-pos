@@ -7,10 +7,6 @@ bin/
 obj/
 .vs/
 
-
-# Env
-.env
-
 # OS
 .DS_Store
 Thumbs.db
